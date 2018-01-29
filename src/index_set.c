@@ -7,10 +7,17 @@
 index_set *
 index_set_new(size_t nzs)
 {
-    index_set *ix = my_calloc(1, sizeof ix[0]);
+    index_set *ix = NULL;
+    if ((ix = my_calloc(1, sizeof ix[0])) == NULL)
+        goto error;
     ix->nzs = nzs;
-    ix->pows = my_calloc(ix->nzs, sizeof ix->pows[0]);
+    if ((ix->pows = my_calloc(ix->nzs, sizeof ix->pows[0])) == NULL)
+        goto error;
     return ix;
+error:
+    if (ix)
+        free(ix);
+    return NULL;
 }
 
 void
@@ -32,6 +39,8 @@ index_set_clear(index_set *ix)
 void
 index_set_print(const index_set *ix)
 {
+    if (ix == NULL)
+        return;
     fprintf(stderr, "%lu: ", ix->nzs);
     for (size_t i = 0; i < ix->nzs; ++i) {
         fprintf(stderr, "%d ", ix->pows[i]);
@@ -42,7 +51,8 @@ index_set_print(const index_set *ix)
 void
 index_set_add(index_set *rop, const index_set *x, const index_set *y)
 {
-    array_add(rop->pows, x->pows, y->pows, rop->nzs);
+    for (size_t i = 0; i < rop->nzs; ++i)
+        rop->pows[i] = x->pows[i] + y->pows[i];
 }
 
 void
@@ -65,7 +75,13 @@ index_set_copy(const index_set *x)
 bool
 index_set_eq(const index_set *x, const index_set *y)
 {
-    return array_eq(x->pows, y->pows, x->nzs);
+    if (x == NULL && y == NULL)
+        return true;
+    for (size_t i = 0; i < x->nzs; ++i) {
+        if (x->pows[i] != y->pows[i])
+            return false;
+    }
+    return true;
 }
 
 index_set *
@@ -104,16 +120,21 @@ error:
 index_set *
 index_set_fread(FILE *fp)
 {
-    index_set *ix = my_calloc(1, sizeof ix[0]);
-    if (ulong_fread(&ix->nzs, fp) == ERR)
+    index_set *ix;
+
+    if ((ix = my_calloc(1, sizeof ix[0])) == NULL)
+        return NULL;
+    if (size_t_fread(&ix->nzs, fp) == ERR)
         goto error;
-    ix->pows = my_calloc(ix->nzs, sizeof ix->pows[0]);
-    for (size_t i = 0; i < ix->nzs; i++) {
+    if ((ix->pows = my_calloc(ix->nzs, sizeof ix->pows[0])) == NULL)
+        goto error;
+    for (size_t i = 0; i < ix->nzs; i++)
         if (int_fread(&ix->pows[i], fp) == ERR)
             goto error;
-    }
     return ix;
 error:
+    if (ix->pows)
+        free(ix->pows);
     free(ix);
     return NULL;
 }
@@ -121,7 +142,9 @@ error:
 int
 index_set_fwrite(const index_set *ix, FILE *fp)
 {
-    if (ulong_fwrite(ix->nzs, fp) == ERR)
+    if (ix == NULL || fp == NULL)
+        return ERR;
+    if (size_t_fwrite(ix->nzs, fp) == ERR)
         return ERR;
     for (size_t i = 0; i < ix->nzs; i++) {
         if (int_fwrite(ix->pows[i], fp) == ERR)

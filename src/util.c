@@ -2,16 +2,20 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <err.h>
 #include <fcntl.h>
-#include <sys/time.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <err.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <unistd.h>
+
 
 #include <gmp.h>
 #include <mmap/mmap_clt.h>
 #include <mmap/mmap_dummy.h>
+
+const char *errorstr = "\033[1;41merror\033[0m";
 
 bool g_verbose = false;
 debug_e g_debug = ERROR;
@@ -21,12 +25,6 @@ double current_time(void) {
     (void) gettimeofday(&t, NULL);
     return (double) (t.tv_sec + (double) (t.tv_usec / 1000000.0));
 }
-int max(int x, int y) {
-    if (x >= y)
-        return x;
-    else
-        return y;
-}
 
 int array_sum(const int *xs, size_t n)
 {
@@ -35,22 +33,6 @@ int array_sum(const int *xs, size_t n)
         res += xs[i];
     }
     return res;
-}
-
-void array_add(int *rop, const int *xs, const int *ys, size_t n)
-{
-    for (size_t i = 0; i < n; ++i) {
-        rop[i] = xs[i] + ys[i];
-    }
-}
-
-bool array_eq(const int *xs, const int *ys, size_t n)
-{
-    for (size_t i = 0; i < n; ++i) {
-        if (xs[i] != ys[i])
-            return false;
-    }
-    return true;
 }
 
 size_t array_max(const size_t *xs, size_t n)
@@ -64,10 +46,10 @@ size_t array_max(const size_t *xs, size_t n)
 }
 
 static void
-array_printstring_rev(const int *xs, size_t n)
+array_printstring(const long *xs, size_t n)
 {
-    for (size_t i = n; i > 0; i--)
-        printf("%c", int_to_char(xs[i-1]));
+    for (size_t i = 0; i < n; ++i)
+        printf("%c", long_to_char(xs[i]));
 }
 
 mpz_t *
@@ -83,17 +65,6 @@ mpz_vect_init(mpz_t *xs, size_t n)
 {
     for (size_t i = 0; i < n; i++)
         mpz_init(xs[i]);
-}
-
-mpz_t * mpz_vect_create_of_fmpz(fmpz_t *fvec, size_t n)
-{
-    mpz_t *vec = mpz_vect_new(n);
-    for (size_t i = 0; i < n; ++i) {
-        fmpz_get_mpz(vec[i], fvec[i]);
-        fmpz_clear(fvec[i]);
-    }
-    free(fvec);
-    return vec;
 }
 
 void mpz_vect_print(mpz_t *xs, size_t len)
@@ -187,48 +158,16 @@ size_t bit(size_t x, size_t i)
     return (x & (1 << i)) > 0;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// custom allocators that complain when they fail
-
 void *
 my_calloc(size_t nmemb, size_t size)
 {
-    void *ptr = calloc(nmemb, size);
-    if (ptr == NULL) {
-        fprintf(stderr, "[%s] couldn't allocate %lu bytes!\n", __func__,
-                nmemb * size);
-        assert(false);
-        return NULL;
-    }
+    void *ptr;
+    ptr = calloc(nmemb, size);
+    if (ptr == NULL)
+        fprintf(stderr, "%s: %s: couldn't allocate %lu bytes!\n",
+                errorstr, __func__, nmemb * size);
     return ptr;
 }
-
-void *
-my_malloc(size_t size)
-{
-    void *ptr = malloc(size);
-    if (ptr == NULL) {
-        fprintf(stderr, "[%s] couldn't allocate %lu bytes!\n", __func__, size);
-        assert(false);
-        return NULL;
-    }
-    return ptr;
-}
-
-void *
-my_realloc(void *ptr, size_t size)
-{
-    void *ptr_ = realloc(ptr, size);
-    if (ptr_ == NULL) {
-        fprintf(stderr, "[%s] couldn't reallocate %lu bytes!\n", __func__, size);
-        assert(false);
-        return NULL;
-    }
-    return ptr_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// serialization
 
 int
 mpz_fread(mpz_t *x, FILE *fp)
@@ -378,8 +317,8 @@ mmap_to_mmap(enum mmap_e mmap)
 }
 
 bool
-print_test_output(size_t num, const int *inp, size_t ninputs, const int *expected,
-                  const int *got, size_t noutputs, bool lin)
+print_test_output(size_t num, const long *inp, size_t ninputs, const long *expected,
+                  const long *got, size_t noutputs, bool lin)
 {
     bool ok = true;
     for (size_t i = 0; i < noutputs; ++i) {
@@ -395,21 +334,21 @@ print_test_output(size_t num, const int *inp, size_t ninputs, const int *expecte
     else
         printf("\033[1;41m");
     printf("Test #%lu: input=", num);
-    array_printstring_rev(inp, ninputs);
+    array_printstring(inp, ninputs);
     if (ok)
         printf(" ✓ ");
     else
-        printf(" ̣✗ ");
+        printf(" ✗ ");
     printf("expected=");
-    array_printstring_rev(expected, noutputs);
+    array_printstring(expected, noutputs);
     printf(" got=");
-    array_printstring_rev(got, noutputs);
+    array_printstring(got, noutputs);
     printf("\033[0m\n");
     return ok;
 }
 
-int
-char_to_int(char c)
+long
+char_to_long(char c)
 {
     if (toupper(c) >= 'A' && toupper(c) <= 'Z')
         return toupper(c) - 'A' + 10;
@@ -422,7 +361,7 @@ char_to_int(char c)
 }
 
 char
-int_to_char(int i)
+long_to_char(long i)
 {
     if (i > 36)
         return '-';
@@ -447,4 +386,50 @@ memory(unsigned long *size, unsigned long *resident)
     *size = *size * 4 / 1024;
     *resident = *resident * 4 / 1024;
     return OK;
+}
+
+size_t
+filesize(const char *fname)
+{
+    struct stat st;
+    if (stat(fname, &st) == 0)
+        return st.st_size;
+    else
+        return 0;
+}
+
+size_t *
+get_input_syms(const long *inputs, size_t ninputs, size_t nsymbols,
+               const size_t *ds, const size_t *qs, const bool *sigmas)
+{
+    size_t *input_syms;
+    size_t k = 0;
+
+    if ((input_syms = my_calloc(nsymbols, sizeof input_syms[0])) == NULL)
+        return NULL;
+    for (size_t i = 0; i < nsymbols; i++) {
+        input_syms[i] = 0;
+        for (size_t j = 0; j < ds[i]; j++) {
+            if (k >= ninputs) {
+                fprintf(stderr, "%s: too many symbols for input length\n",
+                        errorstr);
+                goto error;
+            }
+            if (sigmas[i])
+                input_syms[i] += inputs[k++] * j;
+            else
+                /* XXX causes an error if j > 63 */
+                input_syms[i] += inputs[k++] << j;
+        }
+        if (input_syms[i] >= qs[i]) {
+            fprintf(stderr, "%s: invalid input for symbol %lu (%ld > %lu)\n",
+                    errorstr, i, input_syms[i], qs[i]);
+            goto error;
+        }
+    }
+    return input_syms;
+error:
+    if (input_syms)
+        free(input_syms);
+    return NULL;
 }

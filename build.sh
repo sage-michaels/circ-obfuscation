@@ -3,7 +3,7 @@
 #abort if any command fails
 set -e
 
-mkdir -p build/autoconf
+mkdir -p build/bin build/include build/lib
 builddir=$(readlink -f build)
 
 usage () {
@@ -16,14 +16,14 @@ usage () {
     echo "  help        Print this info and exit"
 }
 
-if [ x"$1" == x"" ]; then
+if [[ "$1" == "" ]]; then
     debug=''
-elif [ x"$1" == x"debug" ]; then
-    debug='--enable-debug'
-elif [ x"$1" == x"clean" ]; then
-    rm -rf build libaesrand clt13 libmmap libacirc libthreadpool
+elif [[ "$1" == "debug" ]]; then
+    debug='-DCMAKE_BUILD_TYPE=Debug'
+elif [[ "$1" == "clean" ]]; then
+    rm -rf build libaesrand clt13 libmmap libacirc libthreadpool circuit-synthesis *.so mio
     exit 0
-elif [ x"$1" == x"help" ]; then
+elif [[ "$1" == "help" ]]; then
     usage
     exit 0
 else
@@ -32,7 +32,6 @@ else
     exit 1
 fi
 
-export CPPFLAGS=-I$builddir/include
 export CFLAGS=-I$builddir/include
 export LDFLAGS=-L$builddir/lib
 
@@ -41,8 +40,11 @@ build () {
     url=$2
     branch=$3
     flags=$debug
-    if [ $path = "libmmap" ]; then
-        flags+=" --without-gghlite"
+    if [[ "${path}" == "libaesrand" ]]; then
+        flags+=" -DHAVE_FLINT=OFF -DHAVE_MPFR=OFF"
+    fi
+    if [[ "${path}" == "libmmap" ]]; then
+        flags+=" -DHAVE_GGHLITE=OFF"
     fi
 
     echo
@@ -50,27 +52,39 @@ build () {
     echo
 
     if [ ! -d $path ]; then
-        git clone $url $path;
+        git clone $url $path -b $branch;
+    else
+        pushd $path; git pull origin $branch; popd
     fi
-    pushd $path
-        git pull origin $branch
-        mkdir -p build/autoconf
-        autoreconf -i
-        ./configure --prefix=$builddir $flags
+    if [[ $path == "circuit-synthesis" ]]; then
+        pushd $path
+        ./build-app.sh
+        cp cxs boots "${builddir}/bin"
+        popd
+    else
+        pushd $path
+        cmake -DCMAKE_INSTALL_PREFIX="${builddir}" $flags .
         make
-        make check
         make install
-    popd
+        popd
+    fi
 }
 
 echo builddir = $builddir
 
-build libaesrand    https://github.com/5GenCrypto/libaesrand master
-build clt13         https://github.com/5GenCrypto/clt13 master
-build libmmap       https://github.com/5GenCrypto/libmmap master
-build libacirc      https://github.com/5GenCrypto/libacirc master
-build libthreadpool https://github.com/5GenCrypto/libthreadpool master
+build libaesrand        https://github.com/5GenCrypto/libaesrand cmake
+build clt13             https://github.com/5GenCrypto/clt13 dev
+build libmmap           https://github.com/5GenCrypto/libmmap dev
+build libthreadpool     https://github.com/5GenCrypto/libthreadpool cmake
+build libacirc          https://github.com/amaloz/libacirc master
+build circuit-synthesis https://github.com/spaceships/circuit-synthesis dev
 
-autoreconf -i
-./configure --prefix=$builddir $debug
+echo
+echo Building mio
+echo
+
+echo $CFLAGS
+
+rm -rf CMakeCache CMakeFiles
+cmake "${debug}" -DCMAKE_C_FLAGS:STRING="${CFLAGS}" -DCMAKE_LIBRARY_PATH:STRING="${builddir}/lib" .
 make

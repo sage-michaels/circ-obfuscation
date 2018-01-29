@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 
-#abort if any command fails
-set -e
+export PATH=$PWD/build/bin
+export LD_LIBRARY_PATH=$PWD/build/lib
 
-dir=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
-
-builddir=$dir/build
-prog=$dir/src/mio
-
-export LD_LIBRARY_PATH=$builddir/lib
-
-$prog "$@"
+./mio "$@"

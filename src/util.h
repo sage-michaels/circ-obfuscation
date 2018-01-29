@@ -2,7 +2,7 @@
 
 #include <aesrand.h>
 #include <gmp.h>
-#include <mmap.h>
+#include <mmap/mmap.h>
 
 #include <stdbool.h>
 
@@ -10,6 +10,8 @@
 #define ERR (-1)
 
 #define PRIVATE __attribute__ ((visibility ("hidden")))
+
+extern const char *errorstr;
 
 typedef enum debug_e {
     ERROR = 0,
@@ -34,13 +36,19 @@ const mmap_vtable * mmap_to_mmap(enum mmap_e mmap);
 
 double current_time(void);
 
-int max(int, int);
+static inline int
+max(int a, int b) {
+    return a > b ? a : b;
+}
+static inline int
+min(int a, int b) {
+    return a > b ? b : a;
+}
 
 void mpz_randomm_inv(mpz_t rop, aes_randstate_t rng, const mpz_t modulus);
 
 mpz_t * mpz_vect_new(size_t n);
 void mpz_vect_init(mpz_t *vec, size_t n);
-mpz_t * mpz_vect_create_of_fmpz(fmpz_t *fvec, size_t n);
 void mpz_vect_print(mpz_t *vec, size_t n);
 void mpz_vect_clear(mpz_t *vec, size_t n);
 void mpz_vect_free(mpz_t *vec, size_t n);
@@ -59,8 +67,6 @@ void mpz_vect_repeat_ui(mpz_t *vec, size_t x, size_t n);
 size_t bit(size_t x, size_t i);
 
 void * my_calloc(size_t nmemb, size_t size);
-void * my_malloc(size_t size);
-void * my_realloc(void *ptr, size_t size);
 
 int mpz_fread(mpz_t *x, FILE *fp);
 int mpz_fwrite(mpz_t x, FILE *fp);
@@ -73,20 +79,20 @@ int size_t_fwrite(size_t x, FILE *fp);
 int bool_fread(bool *x, FILE *fp);
 int bool_fwrite(bool x, FILE *fp);
 
-void array_add(int *rop, const int *xs, const int *ys, size_t n);
-bool array_eq(const int *xs, const int *ys, size_t n);
 int array_sum(const int *xs, size_t n);
 size_t array_max(const size_t *xs, size_t n);
 
 void print_progress(size_t cur, size_t total);
 
-bool
-print_test_output(size_t num, const int *inp, size_t ninputs, const int *expected,
-                  const int *got, size_t noutputs, bool lin);
+bool print_test_output(size_t num, const long *inp, size_t ninputs, const long *expected,
+                       const long *got, size_t noutputs, bool lin);
 
-int
-char_to_int(char c);
-char
-int_to_char(int i);
-int
-memory(unsigned long *size, unsigned long *resident);
+long char_to_long(char c);
+char long_to_char(long i);
+/* return memory usage (in megabytes) */
+int memory(unsigned long *size, unsigned long *resident);
+/* file size (in bytes) */
+size_t filesize(const char *fname);
+
+size_t * get_input_syms(const long *inputs, size_t ninputs, size_t nsymbols,
+                        const size_t *ds, const size_t *qs, const bool *sigmas);
